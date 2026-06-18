@@ -2439,7 +2439,7 @@ const Voice = (function() {
   const cache = {};
   let curr = null;
 
-  const VOL = 0.8;   // 보이스 볼륨 (원곡보다 20% 줄임)
+  const VOL = 0.64;   // 보이스 볼륨 (0.8에서 추가로 20% 줄임)
   function get(key) {
     if (!cache[key]) {
       const a = new Audio(encodeURI(FILES[key]));
@@ -2484,7 +2484,7 @@ const Voice = (function() {
 // =====================================================
 const BGM = (function() {
   const TRACKS = { main: 'sound/main_bg.mp3', on: 'sound/on_bg.wav' };
-  const VOL = 0.3;   // 원곡 대비 30%
+  const VOL = 0.24;   // BGM 볼륨 (0.3에서 추가로 20% 줄임)
   const cache = {};
   let currentKey = null;
 

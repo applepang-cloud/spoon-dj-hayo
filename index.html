@@ -2361,6 +2361,56 @@ const Sound = (function() {
 })();
 
 // =====================================================
+// 보이스 (하요 실제 음성 mp3) - 단일 채널 재생
+// =====================================================
+const Voice = (function() {
+  const FILES = {
+    gameStart: 'sound/하요게임 시작 멘트.mp3',
+    liveStart: 'sound/방송 시작 멘트.mp3',
+    liveEnd:   'sound/방송 종료 멘트.mp3',
+    hingu:     'sound/힝구 애교.mp3',
+    cute:      'sound/다들 귀여워 아주.mp3',
+  };
+  const cache = {};
+  let curr = null;
+
+  function get(key) {
+    if (!cache[key]) {
+      const a = new Audio(encodeURI(FILES[key]));
+      a.preload = 'auto';
+      cache[key] = a;
+    }
+    return cache[key];
+  }
+  function soundOn() {
+    return (typeof state === 'undefined') ? true : state.soundOn !== false;
+  }
+
+  return {
+    // key 재생. onEnd는 재생이 끝나거나(또는 음소거/차단 시 즉시) 호출됨
+    play(key, onEnd) {
+      if (!FILES[key] || !soundOn()) { if (onEnd) onEnd(); return null; }
+      // 이전 보이스는 정지 (단일 채널)
+      if (curr) { try { curr.pause(); } catch(e) {} curr.onended = null; }
+      const a = get(key);
+      a.onended = () => { if (curr === a) curr = null; if (onEnd) onEnd(); };
+      try { a.currentTime = 0; } catch(e) {}
+      curr = a;
+      const p = a.play();
+      if (p && p.catch) p.catch(() => {   // 자동재생 차단 등 → onEnd 보장
+        if (curr === a) curr = null;
+        if (onEnd) onEnd();
+      });
+      return a;
+    },
+    stopAll() {
+      Object.values(cache).forEach(a => { try { a.pause(); a.currentTime = 0; } catch(e) {} });
+      curr = null;
+    }
+  };
+})();
+
+// =====================================================
 // 상수
 // =====================================================
 const SAVE_KEY = 'spoon_dj_ryeong_save_v5';
@@ -3237,7 +3287,7 @@ function createInitialState() {
     usedLiveEvents: [],
     soundOn: true,
     tutorialShown: false,
-    mainFans: ['단골1호', '최애러버', '열혈팬', '찐팬'],   // 플레이어가 지정하는 주요 팬 4명
+    mainFans: ['나퓨타', '쌍무', '하늘', '바보'],   // 플레이어가 지정하는 주요 팬 4명 (기본값)
     mainFanPics: [0, 1, 2, 3],    // 주요 팬 4명의 프사 (FAN_AVATARS 인덱스)
     likeReadyAt: 0,               // 좋아요 충전 완료 시각 (10초 쿨다운)
     aegyoTrainCount: 0,           // 애교 연습 성공 횟수 (2회 이상이면 방송 애교 가능)
@@ -4459,6 +4509,9 @@ function doAegyoTraining(opt, little) {
     showBubble(opt.quote, 3500);
   }
 
+  // 힝구 애교 보이스 (애교 훈련)
+  if (opt.id === 'lvl1') Voice.play('hingu');
+
   floatEmoji(opt.icon, 2);
   if (opt.level === 3) {
     setTimeout(() => floatEmoji('💢', 2), 200);
@@ -5428,6 +5481,7 @@ function maybeFanGreet() {
       '히히 다들 친하게 지내는 거 보니까 흐뭇해요! 너무 귀여워~',
       '우리 청취자분들 인사하는 거 진짜 귀엽다... 다들 사랑해요!'
     ])), 3600);
+    Voice.play('cute');   // "다들 귀여워" 보이스
     floatEmoji('💕', 2);
   }, 700);
 }
@@ -5488,6 +5542,7 @@ function reorderActionButtons(container) {
 // =====================================================
 function startLive() {
   Sound.liveStart();
+  Voice.play('liveStart');   // 방송 시작 멘트 보이스
   state.isLive = true;
   document.getElementById('app').classList.add('live');
   state.liveTurn = 0;
@@ -6007,6 +6062,7 @@ function doLiveAegyo(opt) {
     char.classList.add('excited');
     setTimeout(() => char.classList.remove('excited'), 2200);
     showBubble(pick(ENLIGHTENED_LINES) + ' ' + opt.quote, 4500);
+    if (opt.id === 'lvl1') Voice.play('hingu');   // 힝구 애교 보이스 (방송)
     runAegyoReactions(opt, true, false);
   }
   // === 일반 모드: 다짐 → 애교 → 부끄러움/힘들어함 ===
@@ -6030,6 +6086,7 @@ function doLiveAegyo(opt) {
       char.classList.add('excited');
       Sound.statUpBig();
       showBubble(nyaify(opt.quote), 3500);
+      if (opt.id === 'lvl1') Voice.play('hingu');   // 힝구 애교 보이스 (방송)
       runAegyoReactions(opt, false, nyaActive);
       setTimeout(() => char.classList.remove('excited'), 2000);
 
@@ -6395,7 +6452,7 @@ function updateLikeButton() {
 
 // 주요 팬 이름 짓기/변경 모달
 function openFanNameModal(isStart, onDone) {
-  const placeholders = ['단골1호', '최애러버', '열혈팬', '찐팬'];
+  const placeholders = ['나퓨타', '쌍무', '하늘', '바보'];
   const fans = (state.mainFans && state.mainFans.length === 4) ? state.mainFans : placeholders.slice();
   const sel = (state.mainFanPics && state.mainFanPics.length === 4) ? state.mainFanPics.slice() : [0, 1, 2, 3];
 
@@ -7051,6 +7108,7 @@ function doRouletteAegyo(optId) {
     if (char) { char.classList.remove('sad'); char.classList.add('excited'); }
     Sound.statUpBig();
     showBubble(opt.quote, 4000);
+    if (optId === 'lvl1') Voice.play('hingu');   // 힝구 애교 보이스 (룰렛)
     floatEmoji(isOppa ? '❤️' : '🥺', 5);
     spoonRain(12);
     const cheer = isOppa
@@ -7257,7 +7315,11 @@ function endLive() {
     showBubble(nyaify(pick(LINES.live_end)));
     addChatMsg('', '📻 방송이 종료되었습니다', 'system');
 
-    setTimeout(() => {
+    // 방송 종료 멘트 보이스를 끝까지 출력한 뒤에 결산/종료로 진행
+    let _endDone = false;
+    const proceed = () => {
+      if (_endDone) return;
+      _endDone = true;
       // 냥체/존댓말 모드 끝내기
       if (state.nyaTimerInterval) { clearInterval(state.nyaTimerInterval); state.nyaTimerInterval = null; }
       state.nyaModeUntil = 0;
@@ -7286,9 +7348,16 @@ function endLive() {
         null,
         () => closeLive(true),
         rankEmoji);
-    }, 1500);
+    };
+    // 보이스가 끝나면 결산 모달, 안전장치로 최대 9초 후 진행
+    Voice.play('liveEnd', proceed);
+    setTimeout(proceed, 9000);
   } else {
-    setTimeout(() => closeLive(false), 400);
+    // 액션이 없어도 종료 멘트는 끝까지 출력 후 종료
+    let _endDone2 = false;
+    const proceed2 = () => { if (_endDone2) return; _endDone2 = true; closeLive(false); };
+    Voice.play('liveEnd', proceed2);
+    setTimeout(proceed2, 9000);
   }
 }
 
@@ -7526,6 +7595,8 @@ function beginGame() {
   renderLog();
   updateSoundButton();
   Sound.setEnabled(state.soundOn);
+  // 게임 시작 보이스 (스타트 버튼 클릭 직후라 자동재생 허용됨)
+  Voice.play('gameStart');
   setTimeout(() => {
     if (state.eventLog.length === 0) {
       showBubble('매니저님! 잘 부탁드려요!', 3500);

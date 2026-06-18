@@ -1411,6 +1411,15 @@
     max-height: 88vh;
     overflow-y: auto;
   }
+  /* 주요 팬 설정 모달 - 컴팩트하게 + 위로 올려서 하단 버튼 안 잘리게 */
+  .modal.fanname-modal {
+    padding: 16px 18px 18px;
+    max-height: 94vh;
+  }
+  .modal.fanname-modal h2 { margin-bottom: 4px; }
+  /* 이 모달이 떠 있을 땐 위쪽 정렬로 올려서 하단 버튼이 안 잘리게 */
+  .modal-bg:has(.modal.fanname-modal) { align-items: flex-start; padding: 8px 20px; }
+
   .modal.choice-modal {
     background: linear-gradient(180deg, #fef08a 0%, #fff 40%);
     border-color: var(--gold);
@@ -2374,10 +2383,12 @@ const Voice = (function() {
   const cache = {};
   let curr = null;
 
+  const VOL = 0.8;   // 보이스 볼륨 (원곡보다 20% 줄임)
   function get(key) {
     if (!cache[key]) {
       const a = new Audio(encodeURI(FILES[key]));
       a.preload = 'auto';
+      a.volume = VOL;
       cache[key] = a;
     }
     return cache[key];
@@ -2393,6 +2404,7 @@ const Voice = (function() {
       // 이전 보이스는 정지 (단일 채널)
       if (curr) { try { curr.pause(); } catch(e) {} curr.onended = null; }
       const a = get(key);
+      a.volume = VOL;
       a.onended = () => { if (curr === a) curr = null; if (onEnd) onEnd(); };
       try { a.currentTime = 0; } catch(e) {}
       curr = a;
@@ -2441,11 +2453,27 @@ const BGM = (function() {
     if (p && p.catch) p.catch(() => {});
   }
 
+  // 자동재생이 막혔을 때를 대비해, 첫 사용자 상호작용에서 BGM을 재시작
+  let unlockBound = false;
+  function bindUnlock() {
+    if (unlockBound) return;
+    unlockBound = true;
+    const handler = () => {
+      if (currentKey && soundOn()) {
+        const a = get(currentKey);
+        if (a.paused) startCurrent();
+      }
+    };
+    ['pointerdown', 'click', 'touchstart', 'keydown'].forEach(ev =>
+      document.addEventListener(ev, handler, { passive: true }));
+  }
+
   return {
     // 지정한 트랙으로 전환 (다른 트랙은 정지). key=null이면 전부 정지
     switchTo(key) {
       currentKey = key;
       Object.keys(cache).forEach(k => { if (k !== key) { try { cache[k].pause(); } catch(e) {} } });
+      bindUnlock();
       startCurrent();
     },
     // 음소거 토글 시 현재 트랙 재생/정지 반영
@@ -2458,6 +2486,15 @@ const BGM = (function() {
     stopAll() {
       Object.values(cache).forEach(a => { try { a.pause(); } catch(e) {} });
       currentKey = null;
+    },
+    // 디버그용 상태
+    _debug() {
+      return {
+        currentKey,
+        main: cache.main ? { paused: cache.main.paused, vol: cache.main.volume, ct: cache.main.currentTime } : null,
+        on: cache.on ? { paused: cache.on.paused, vol: cache.on.volume, ct: cache.on.currentTime } : null,
+        soundOn: soundOn()
+      };
     }
   };
 })();
@@ -3792,7 +3829,7 @@ function showModal(title, body, resultHtml, options, onClose, emoji, modalClass)
   document.getElementById('modalBody').style.display = resultHtml ? 'block' : 'none';
 
   const modalEl = document.getElementById('modal');
-  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal');
+  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal', 'fanname-modal');
   if (modalClass) modalEl.classList.add(modalClass);
 
   const emojiEl = document.getElementById('modalEmoji');
@@ -4478,7 +4515,7 @@ function showModalWithClass(title, body, resultHtml, options, onClose, emoji, mo
   document.getElementById('modalBody').style.display = resultHtml ? 'block' : 'none';
 
   const modalEl = document.getElementById('modal');
-  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal');
+  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal', 'fanname-modal');
   if (modalClass) modalEl.classList.add(modalClass);
 
   const emojiEl = document.getElementById('modalEmoji');
@@ -6509,10 +6546,10 @@ function openFanNameModal(isStart, onDone) {
   const fans = (state.mainFans && state.mainFans.length === 4) ? state.mainFans : placeholders.slice();
   const sel = (state.mainFanPics && state.mainFanPics.length === 4) ? state.mainFanPics.slice() : [0, 1, 2, 3];
 
-  let body = `<div style="font-size:12.5px; color:var(--ink-muted); margin-bottom:10px; line-height:1.55;">${isStart
-    ? '하요를 응원해줄 <b style="color:#ec4899;">주요 팬 4명</b>의 이름과 프사를 정해주세요!<br>방송 채팅과 팬 리스트에 자주 등장해요 💕'
+  let body = `<div style="font-size:12px; color:var(--ink-muted); margin-bottom:7px; line-height:1.45;">${isStart
+    ? '하요를 응원해줄 <b style="color:#ec4899;">주요 팬 4명</b>의 이름과 프사를 정해주세요! 방송 채팅·팬 리스트에 자주 나와요 💕'
     : '주요 팬 4명의 이름과 프사를 바꿀 수 있어요 ✏️'}</div>`;
-  body += '<div style="display:flex; flex-direction:column; gap:10px; padding:2px;">';
+  body += '<div style="display:flex; flex-direction:column; gap:7px; padding:1px;">';
   for (let i = 0; i < 4; i++) {
     const v = (fans[i] || '').replace(/"/g, '&quot;');
     const cur = FAN_AVATARS[sel[i]] || FAN_AVATARS[0];
@@ -6520,11 +6557,11 @@ function openFanNameModal(isStart, onDone) {
       <div class="fan-edit-row">
         <img id="fanPreview${i}" class="fan-edit-preview" data-fan="${i}" src="${cur}" alt="" title="프사 고르기">
         <button class="fan-pic-edit-btn" data-fanedit="${i}" title="프사 고르기">✏️</button>
-        <input id="fanNameInput${i}" type="text" maxlength="8" value="${v}" placeholder="${placeholders[i]}" style="flex:1; min-width:0; font-family:'Gowun Dodum'; font-weight:700; font-size:14px; padding:9px 11px; border:2px solid var(--ink); border-radius:10px; background:#fff; box-shadow:2px 2px 0 var(--ink);">
+        <input id="fanNameInput${i}" type="text" maxlength="8" value="${v}" placeholder="${placeholders[i]}" style="flex:1; min-width:0; font-family:'Gowun Dodum'; font-weight:700; font-size:14px; padding:8px 11px; border:2px solid var(--ink); border-radius:10px; background:#fff; box-shadow:2px 2px 0 var(--ink);">
       </div>
     `;
   }
-  body += '</div><div style="font-size:11px; color:var(--ink-muted); margin-top:8px; text-align:center;">프사를 누르면 이미지를 고를 수 있어요 🖼️</div>';
+  body += '</div><div style="font-size:10.5px; color:var(--ink-muted); margin-top:5px; text-align:center;">프사를 누르면 이미지를 고를 수 있어요 🖼️</div>';
 
   showModalWithClass(
     isStart ? '💕 주요 팬 4명 설정' : '✏️ 주요 팬 변경',
@@ -6553,7 +6590,8 @@ function openFanNameModal(isStart, onDone) {
       }
     }],
     null,
-    isStart ? '💕' : '✏️'
+    '',              // 상단 이모지(하트) 제거
+    'fanname-modal'  // 컴팩트 레이아웃 + 위로 정렬
   );
 
   // 프사 누르면 팝업으로 고르기

@@ -1885,6 +1885,45 @@
     78% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
     100% { opacity: 0; transform: translate(-50%,-50%) scale(0.95) translateY(-14px); }
   }
+
+  /* ===== 게임 안내(손가락 + 말풍선) ===== */
+  .game-hint {
+    position: absolute;
+    z-index: 2450;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    pointer-events: none;
+    filter: drop-shadow(0 3px 5px rgba(0,0,0,0.28));
+  }
+  .game-hint.fade-out { opacity: 0; transition: opacity 0.4s; }
+  .game-hint .hint-finger { font-size: 38px; line-height: 1; }
+  .game-hint .hint-bubble {
+    background: #fff;
+    border: 2.5px solid var(--ink);
+    border-radius: 14px;
+    padding: 7px 11px;
+    font-family: 'Jua', sans-serif;
+    font-size: 13px;
+    color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+    max-width: 170px;
+    line-height: 1.35;
+    text-align: center;
+  }
+  /* 상하 스크롤 안내: 손가락이 위아래로 */
+  .game-hint.hint-scroll { flex-direction: column; }
+  .game-hint.hint-scroll .hint-finger { animation: hintUpDown 1.2s ease-in-out infinite; }
+  @keyframes hintUpDown { 0%,100%{transform:translateY(-10px);} 50%{transform:translateY(12px);} }
+  /* 아래를 가리킴(시작 버튼 등): 손가락 위, 말풍선 아래 위치는 호출부에서 */
+  .game-hint.hint-down { flex-direction: column; }
+  .game-hint.hint-down .hint-finger { animation: hintBounceY 0.9s ease-in-out infinite; }
+  @keyframes hintBounceY { 0%,100%{transform:translateY(0);} 50%{transform:translateY(9px);} }
+  /* 콕콕 가리킴(입력칸 등) */
+  .game-hint.hint-poke .hint-finger { animation: hintBounceY 0.8s ease-in-out infinite; }
+  /* 말풍선 위 + 손가락(👇) 아래로 대상 가리킴 */
+  .game-hint.hint-downptr { flex-direction: column-reverse; }
+  .game-hint.hint-downptr .hint-finger { animation: hintBounceY 0.9s ease-in-out infinite; }
 </style>
 </head><body>
 <div class="app" id="app">
@@ -2142,7 +2181,7 @@ const Sound = (function() {
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC();
       masterGain = ctx.createGain();
-      masterGain.gain.value = 0.25;
+      masterGain.gain.value = 0.30;
       masterGain.connect(ctx.destination);
     } catch(e) {}
     return ctx;
@@ -2204,7 +2243,7 @@ const Sound = (function() {
     init() { ensureCtx(); resume(); },
     setEnabled(v) {
       enabled = v;
-      if (masterGain) masterGain.gain.value = v ? 0.25 : 0;
+      if (masterGain) masterGain.gain.value = v ? 0.30 : 0;
     },
     isEnabled() { return enabled; },
 
@@ -3717,6 +3756,7 @@ function refreshActionButtons() {
   });
 
   reorderActionButtons(actions);   // 활성 버튼 위로, 비활성 아래로
+  maybeScrollHint(actions, 'scroll');   // 아래로 가려지면 스크롤 안내(처음 한 번)
 }
 
 function flashStat(statName) {
@@ -5637,9 +5677,83 @@ function reorderActionButtons(container) {
     if (el.classList.contains('end-btn')) { endBtn = el; return; }
     if (el.disabled) disabled.push(el); else enabled.push(el);
   });
-  const ordered = [...top, ...enabled, ...disabled];
+  // 방송 종료 버튼은 (랭크바 등 top 요소) 바로 아래, 즉 메뉴 최상단에 고정
+  const ordered = [...top];
   if (endBtn) ordered.push(endBtn);
+  ordered.push(...enabled, ...disabled);
   ordered.forEach(el => container.appendChild(el));  // 노드 이동(이벤트 유지)
+}
+
+// =====================================================
+// 게임 안내 (손가락 + 말풍선)
+// =====================================================
+let _hintEl = null, _hintCleanup = null;
+function clearHint() {
+  if (_hintCleanup) { _hintCleanup(); _hintCleanup = null; }
+  if (_hintEl) { _hintEl.remove(); _hintEl = null; }
+}
+function hintSeen(key) { try { return localStorage.getItem('hint_' + key) === '1'; } catch(e) { return false; } }
+function markHint(key) { try { localStorage.setItem('hint_' + key, '1'); } catch(e) {} }
+
+// targetEl 근처에 손가락+말풍선 안내 표시
+// opts: { html, finger, kind, place:'above'|'below'|'left'|'right'|'center', autoHideMs, scrollTarget }
+function showHintAt(targetEl, opts) {
+  if (!targetEl) return;
+  clearHint();
+  const app = document.getElementById('app');
+  const el = document.createElement('div');
+  el.className = 'game-hint ' + (opts.kind || '');
+  el.innerHTML = `<div class="hint-finger">${opts.finger || '👆'}</div><div class="hint-bubble">${opts.html}</div>`;
+  app.appendChild(el);
+
+  const reposition = () => {
+    const appR = app.getBoundingClientRect();
+    const tR = targetEl.getBoundingClientRect();
+    const elR = el.getBoundingClientRect();
+    const cx = tR.left - appR.left + tR.width / 2;
+    const cy = tR.top - appR.top + tR.height / 2;
+    let left, top;
+    if (opts.place === 'above')      { left = cx - elR.width/2; top = (tR.top - appR.top) - elR.height - 2; }
+    else if (opts.place === 'left')  { left = (tR.left - appR.left) - elR.width - 2; top = cy - elR.height/2; }
+    else if (opts.place === 'right') { left = (tR.right - appR.left) + 2; top = cy - elR.height/2; }
+    else if (opts.place === 'center'){ left = cx - elR.width/2; top = cy - elR.height/2; }
+    else                             { left = cx - elR.width/2; top = (tR.bottom - appR.top) + 2; }  // below
+    left = Math.max(6, Math.min(left, appR.width - elR.width - 6));
+    top  = Math.max(6, Math.min(top, appR.height - elR.height - 6));
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+  };
+  reposition();
+  _hintEl = el;
+
+  const dismiss = () => { if (_hintEl !== el) return; el.classList.add('fade-out'); setTimeout(() => { if (_hintEl === el) clearHint(); }, 400); };
+  const onDown = () => dismiss();
+  const onScroll = () => dismiss();
+  setTimeout(() => document.addEventListener('pointerdown', onDown, { once: true }), 80);
+  if (opts.scrollTarget) opts.scrollTarget.addEventListener('scroll', onScroll, { once: true });
+  const t = opts.autoHideMs ? setTimeout(dismiss, opts.autoHideMs) : null;
+  _hintCleanup = () => {
+    document.removeEventListener('pointerdown', onDown);
+    if (opts.scrollTarget) opts.scrollTarget.removeEventListener('scroll', onScroll);
+    if (t) clearTimeout(t);
+  };
+  return el;
+}
+
+// 아래로 가려진(스크롤 가능한) 영역에 "위아래로 움직일 수 있어요" 안내 (처음 한 번)
+function maybeScrollHint(container, key) {
+  if (!container || hintSeen(key)) return;
+  // 한 프레임 뒤 측정 (레이아웃 안정화)
+  setTimeout(() => {
+    if (hintSeen(key) || !container.isConnected) return;
+    if (container.scrollHeight <= container.clientHeight + 8) return;  // 가려진 내용 없음
+    markHint(key);
+    showHintAt(container, {
+      finger: '👆', kind: 'hint-scroll', place: 'center',
+      html: '화면을 위 아래로<br>움직일 수 있어요',
+      scrollTarget: container, autoHideMs: 7000
+    });
+  }, 350);
 }
 
 
@@ -5765,6 +5879,7 @@ function renderLiveActions() {
   });
 
   reorderActionButtons(actions);   // 활성 버튼 위로, 비활성 아래로
+  maybeScrollHint(actions, 'scroll');   // 아래로 가려지면 스크롤 안내(처음 한 번)
 
   if (!likeReady) startLikeTick();   // 좋아요 충전중이면 카운트다운 갱신
 }
@@ -6627,6 +6742,18 @@ function openFanNameModal(isStart, onDone) {
     const eb = document.querySelector(`[data-fanedit="${i}"]`);
     if (eb) eb.addEventListener('click', () => openPicker(i));
   }
+
+  // 손가락으로 가리키며 "여기 눌러서 이름 바꿀 수 있어요" (모달 등장 애니 후)
+  setTimeout(() => {
+    const input = document.getElementById('fanNameInput0');
+    if (input && document.getElementById('modalBg').classList.contains('show')) {
+      showHintAt(input, {
+        finger: '👇', kind: 'hint-downptr', place: 'above',
+        html: '여기 눌러서<br>이름 바꿀 수 있어요',
+        autoHideMs: 6000
+      });
+    }
+  }, 520);
 }
 
 // 팬 프사 고르기 팝업 (팬 설정 위에 독립 오버레이로 표시)
@@ -7828,6 +7955,19 @@ document.addEventListener('touchmove', (e) => {
 })();
 
 generateSparkles();
+
+// 타이틀: "시작 누르기" 안내 (손가락 + 말풍선)
+setTimeout(() => {
+  const ts = document.getElementById('titleScreen');
+  const sb = document.getElementById('startBtn');
+  if (ts && !ts.classList.contains('hidden') && sb) {
+    showHintAt(sb, {
+      finger: '👇', kind: 'hint-downptr', place: 'above',
+      html: '여기를 눌러<br>시작해요!',
+      autoHideMs: 9000
+    });
+  }
+}, 900);
 </script>
 </body>
 </html>

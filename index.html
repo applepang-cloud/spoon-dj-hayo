@@ -2411,6 +2411,58 @@ const Voice = (function() {
 })();
 
 // =====================================================
+// 배경음악 (BGM) - 루프, 볼륨 원곡의 30%
+// main: 게임 플레이 중(방송 제외), on: 방송 중에만
+// =====================================================
+const BGM = (function() {
+  const TRACKS = { main: 'sound/main_bg.mp3', on: 'sound/on_bg.wav' };
+  const VOL = 0.3;   // 원곡 대비 30%
+  const cache = {};
+  let currentKey = null;
+
+  function get(key) {
+    if (!cache[key]) {
+      const a = new Audio(encodeURI(TRACKS[key]));
+      a.loop = true;
+      a.volume = VOL;
+      a.preload = 'auto';
+      cache[key] = a;
+    }
+    return cache[key];
+  }
+  function soundOn() {
+    return (typeof state === 'undefined') ? true : state.soundOn !== false;
+  }
+  function startCurrent() {
+    if (!currentKey || !soundOn()) return;
+    const a = get(currentKey);
+    a.volume = VOL;
+    const p = a.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  return {
+    // 지정한 트랙으로 전환 (다른 트랙은 정지). key=null이면 전부 정지
+    switchTo(key) {
+      currentKey = key;
+      Object.keys(cache).forEach(k => { if (k !== key) { try { cache[k].pause(); } catch(e) {} } });
+      startCurrent();
+    },
+    // 음소거 토글 시 현재 트랙 재생/정지 반영
+    refresh() {
+      if (!currentKey) return;
+      const a = get(currentKey);
+      if (soundOn()) startCurrent();
+      else { try { a.pause(); } catch(e) {} }
+    },
+    stopAll() {
+      Object.values(cache).forEach(a => { try { a.pause(); } catch(e) {} });
+      currentKey = null;
+    }
+  };
+})();
+
+// =====================================================
 // 상수
 // =====================================================
 const SAVE_KEY = 'spoon_dj_ryeong_save_v5';
@@ -5543,6 +5595,7 @@ function reorderActionButtons(container) {
 function startLive() {
   Sound.liveStart();
   Voice.play('liveStart');   // 방송 시작 멘트 보이스
+  BGM.switchTo('on');        // 방송 전용 배경음악
   state.isLive = true;
   document.getElementById('app').classList.add('live');
   state.liveTurn = 0;
@@ -7371,6 +7424,7 @@ function closeLive(didBroadcast) {
   _rouletteSpinning = false;
   const rb = document.getElementById('rouletteBg');
   if (rb) rb.classList.remove('show');
+  BGM.switchTo('main');   // 방송 끝 → 일반 배경음악으로 복귀
 
   if (didBroadcast) {
     addLog('star', `📻 방송 #${state.broadcastCount}! 🥄${state.liveSpoons} 💰+${fmt(state.liveSpoons*100)} 👥+${state.liveNewFans}`);
@@ -7507,6 +7561,8 @@ function toggleSound() {
   state.soundOn = !state.soundOn;
   Sound.setEnabled(state.soundOn);
   if (state.soundOn) Sound.click();
+  BGM.refresh();          // 배경음악도 음소거 토글에 반영
+  if (!state.soundOn) Voice.stopAll();
   updateSoundButton();
   saveGame();
 }
@@ -7597,6 +7653,8 @@ function beginGame() {
   Sound.setEnabled(state.soundOn);
   // 게임 시작 보이스 (스타트 버튼 클릭 직후라 자동재생 허용됨)
   Voice.play('gameStart');
+  // 배경음악 시작 (방송 중이 아니면 main, 방송 중이면 on)
+  BGM.switchTo(state.isLive ? 'on' : 'main');
   setTimeout(() => {
     if (state.eventLog.length === 0) {
       showBubble('매니저님! 잘 부탁드려요!', 3500);

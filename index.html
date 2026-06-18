@@ -1430,6 +1430,11 @@
   .modal.guide-modal .modal-result { margin: 8px 0; padding: 12px; }
   .modal-bg:has(.modal.guide-modal) { align-items: flex-start; padding: 8px 20px; }
 
+  /* 상단 아이콘 없이 위로 정렬 + 컴팩트 (팬 리스트 등 긴 목록 모달) */
+  .modal.compact-modal { padding-top: 16px; max-height: 95vh; }
+  .modal.compact-modal h2 { margin-bottom: 8px; }
+  .modal-bg:has(.modal.compact-modal) { align-items: flex-start; padding: 8px 20px; }
+
   /* 연두색 버튼 (새로 시작 / 시작하기) */
   .modal-options .opt-btn.green-btn {
     background: linear-gradient(135deg, #bef264, #84cc16);
@@ -2439,7 +2444,7 @@ const Voice = (function() {
   const cache = {};
   let curr = null;
 
-  const VOL = 0.64;   // 보이스 볼륨 (0.8에서 추가로 20% 줄임)
+  const VOL = 0.512;   // 보이스 볼륨 (추가로 20% 줄임)
   function get(key) {
     if (!cache[key]) {
       const a = new Audio(encodeURI(FILES[key]));
@@ -2484,7 +2489,7 @@ const Voice = (function() {
 // =====================================================
 const BGM = (function() {
   const TRACKS = { main: 'sound/main_bg.mp3', on: 'sound/on_bg.wav' };
-  const VOL = 0.24;   // BGM 볼륨 (0.3에서 추가로 20% 줄임)
+  const VOL = 0.192;   // BGM 볼륨 (추가로 20% 줄임)
   const cache = {};
   let currentKey = null;
 
@@ -3886,7 +3891,7 @@ function showModal(title, body, resultHtml, options, onClose, emoji, modalClass)
   document.getElementById('modalBody').style.display = resultHtml ? 'block' : 'none';
 
   const modalEl = document.getElementById('modal');
-  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal', 'fanname-modal', 'guide-modal');
+  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal', 'fanname-modal', 'guide-modal', 'compact-modal');
   if (modalClass) modalEl.classList.add(modalClass);
 
   const emojiEl = document.getElementById('modalEmoji');
@@ -4572,7 +4577,7 @@ function showModalWithClass(title, body, resultHtml, options, onClose, emoji, mo
   document.getElementById('modalBody').style.display = resultHtml ? 'block' : 'none';
 
   const modalEl = document.getElementById('modal');
-  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal', 'fanname-modal', 'guide-modal');
+  modalEl.classList.remove('choice-modal', 'fail-modal', 'rebel-modal', 'fanname-modal', 'guide-modal', 'compact-modal');
   if (modalClass) modalEl.classList.add(modalClass);
 
   const emojiEl = document.getElementById('modalEmoji');
@@ -5488,11 +5493,11 @@ function openFanListModal() {
       <span style="font-family:'Jua',sans-serif; font-size:13px;">👥 청취자 ${sorted.length}명</span>
       <span style="font-family:'Jua',sans-serif; font-size:13px; color:#ec4899;">💖 애청자 ${regulars}명</span>
     </div>
-    <div style="display:flex; flex-direction:column; gap:6px; max-height:46vh; overflow-y:auto; -webkit-overflow-scrolling:touch;">
+    <div style="display:flex; flex-direction:column; gap:6px; max-height:40vh; overflow-y:auto; -webkit-overflow-scrolling:touch;">
       ${rows}
     </div>`;
 
-  showModal('🌡️ 청취자 팬 리스트', '', html, null, null, '📻');
+  showModal('🌡️ 청취자 팬 리스트', '', html, null, null, '', 'compact-modal');
 }
 
 // 주요 팬 리스트 (방송 아닐 때 - 주요 팬 4명 + 애청 온도)
@@ -5536,11 +5541,11 @@ function openMainFanListModal() {
       <span style="font-family:'Jua',sans-serif; font-size:13px;">💎 주요 팬 ${sorted.length}명</span>
       <span style="font-family:'Jua',sans-serif; font-size:13px; color:#ec4899;">💖 애청자 ${regulars}명</span>
     </div>
-    <div style="display:flex; flex-direction:column; gap:6px;">
+    <div style="display:flex; flex-direction:column; gap:6px; max-height:40vh; overflow-y:auto; -webkit-overflow-scrolling:touch;">
       ${rows}
     </div>`;
 
-  showModal('💎 주요 팬 리스트', '', html, null, null, '👥');
+  showModal('💎 주요 팬 리스트', '', html, null, null, '', 'compact-modal');
 }
 
 // 힝구/오빠 채팅 안 읽기 - 방송 중 가끔 발동
